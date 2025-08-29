@@ -1,0 +1,411 @@
+i want to create an mobile app. A user use all social media apps, with the use of LLM's API for decision making ( with very large predefined decisions and UI widgets etc.). A user should use all social media with impressive and so that it can make user experience very smooth. It will revolutionize with very advance features. ( for example perplexity in chatting with LLM domain). i want to make in social media domain with very advance feature which should be very impressive for user in current scenario ( see difficulties with social medias, like instagram, youtube, X, facebook, tiktok etc.). user first add social media accounts then show. I want to use LLM api in what way they suits but make very advance add more advanced use of ChatGpt APIs. in showing UI, store actions of user in device and LLM api make decisions on their basis. i will become very interesting for user to use. 
+
+Love the ambition. Let’s design a **single “super social” app** where ChatGPT is the **decision layer**: it unifies feeds, adapts the UI in real-time from on-device behavior, and gives you “intent shortcuts” so a user says what they want and the app does it across Instagram/YouTube/X/Facebook/TikTok (through official APIs the user connects). at show connected apps only. there should login system of the apps , after successfully login then show app.
+
+Below is a **ship-ready blueprint**: data model, agents, prompts, UI/UX patterns, backend, and Flutter implementation notes. You can build the MVP with this.
+everything should be very smartly showing, responsive. highly secure app. 
+the complete app should behave like very smart and talented assistant or decision maker. based on the user's behavior and data automatically make decisions and give suggestions.
+
+
+---
+
+# 1) What the app *is*
+
+**One home, all socials.** Users connect accounts via OAuth. The app ingests metadata (titles, captions, creators, URLs, thumbnails, public stats) via official APIs. It **doesn’t show separate tabs**—instead, a **unified, adaptive feed**.
+**On-device memory** of taps, swipes, dwell time, saves, shares, scroll velocity → compressed to private summaries → sent to ChatGPT for **layout + ranking + copy decisions**. 
+
+---
+
+# 2) Core capabilities (LLM as the decision layer)
+
+### A. Adaptive UI (LLM-driven layout)
+
+* LLM receives periodic behavior summaries and outputs **UI config**:
+based on the behavior of user ( from saved in device) show UI , widgets and suggestions. 
+
+
+  * Home sections on/off, order of carousels, tab order, chip filters, ad density limits.
+with decision making with AI.
+Update or adjust the UI and widgets in whole app according to content's size, type, ranking, connections, behavior of user.
+
+  * “Today you prefer short videos → show Shorts row first; collapse long reads.”
+
+**Decision contract**
+
+```json
+{
+  "version": "1.0",
+  "layout": {
+    "sections": [
+      {"id":"shorts","priority":0,"visible":true},
+      {"id":"threads","priority":1,"visible":false},
+      {"id":"longform","priority":2,"visible":true}
+    ],
+    "feature_flags": {"autosummary":true,"downrank_ads":true}
+  },
+  "feed_rules": {
+    "blocklist":["low_quality_ad","duplicate_content"],
+    "boost_tags":["photography","ai","fitness"]
+  }
+}
+```
+
+### B. Unified, intent-driven actions
+
+Natural commands, e.g.:
+
+* “**Show only today’s viral AI videos under 3 minutes**.”
+* “**Draft witty replies to the top 3 comments I should answer**.”
+* “**Cross-post this reel to X & Threads in my brand voice**.”
+
+LLM orchestrates: search → rerank → summarize → draft → route to right platform(s).
+
+### C. Conversation-aware notifications
+
+LLM clusters and rewrites:
+
+* “You got 5 likes, but **Sana** (high affinity) commented—*here’s a suggested reply*.”
+* Mutes patterns you ignore (e.g., likes from low-affinity accounts).
+
+### D. Mood & pace sensitivity
+
+LLM infers “quick hits” vs “deep dive” moments from **scroll speed**, **session time**, **skip rate**, **time of day** → swaps feed recipe.
+
+### E. Multi-agent brain (behind the scenes)
+
+* **Ingestion Agent**: normalizes data across networks.
+* **Ranking Agent**: blends heuristics (bandits) + LLM reranker.
+* **UI Agent**: emits layout schema.
+* **Safety Agent**: toxicity/NSFW/spam checks.
+* **Creator/Reply Agent**: tone-matched captions, replies, cross-platform rewrites.
+* **Notification Agent**: bundles & prioritizes alerts.
+
+---
+
+# 3) Privacy & learning model
+
+* **Raw actions stored on device** (Hive/SQLite).
+* Every N minutes, a **local compressor** creates a summary (counts, histograms, top tags/creators, no PII text).
+* Only the **summary** goes to the LLM.
+* Optional: **Privacy Modes**
+
+  * *Strict*: no cloud personalization, only on-device heuristics.
+  * *Balanced* (default): send summaries.
+  * *Open*: allow pseudonymous server-side embeddings for better recall.
+
+**Action log (on-device)**
+
+```json
+{
+  "uid":"local-only",
+  "events":[
+    {"t":1692012345,"type":"view","post":"yt:abc","ms":9200},
+    {"t":1692012355,"type":"skip","post":"ig:xyz"},
+    {"t":1692012380,"type":"like","post":"x:123"}
+  ],
+  "session":{"start":1692012000,"duration_ms":1800000,"scroll_speed":"fast"}
+}
+```
+
+**Summarization output (to LLM)**
+
+```json
+{
+  "period":"2025-08-29T06:00:00Z/2025-08-29T06:15:00Z",
+  "counts":{"views":180,"skips":120,"likes":25,"comments":4,"shares":2},
+  "avg_watch_ms":{"shorts":6400,"longform":28000},
+  "top_tags":["photography","ai","comedy"],
+  "top_creators":["@sana","@hardwareguy"],
+  "ignore_patterns":["sponsored_generic","crypto_shill"],
+  "mood":"light_content"
+}
+```
+
+---
+
+# 4) Ranking recipe (simple, strong, explainable)
+
+1. **Heuristics prefilter**
+
+   * De-duplicate cross-posts.
+   * Blocklist known low-quality patterns.
+   * Time decay + freshness.
+
+2. **Multi-armed bandit** (per content type)
+
+   * Arms: shorts, longform, threads, image posts, carousels.
+   * Reward: watch-time z-score + like/comment probability + “save” bonus.
+   * Explore/exploit parameter adapts to user boredom (detected by swipes).
+
+3. **LLM rerank (top 100 → top 25)**
+
+   * Prompt with **user interests + current intent** to improve diversity while aligning.
+
+**LLM Rerank prompt (system)**
+
+```
+You are a feed reranker optimizing satisfaction for this user.
+Consider user_summary, session_mood, and request_intent.
+Return top 25 items with reasons and a diversity budget.
+```
+
+**(user)**
+
+```json
+{
+ "user_summary":{"top_tags":["photography","ai","fitness"],"mood":"light_content"},
+ "request_intent":"default_scroll",
+ "candidates":[
+   {"id":"yt:abc","type":"short","tags":["ai","coding"],"creator":"@hardwareguy","age_min":22,"watch_ms_p50":15000},
+   {"id":"ig:xyz","type":"image","tags":["fitness","nutrition"],"creator":"@sana","age_min":10}
+ ]
+}
+```
+
+**(assistant)**
+
+```json
+{
+ "order":["ig:xyz","yt:abc", "..."],
+ "notes":{"diversity":["fitness","photography"],"downrank":["generic_ads"]}
+}
+```
+
+---
+
+# 5) Safety & compliance
+
+* **Only official APIs + user OAuth**. No scraping or ToS-violating automation.
+* Safety Agent screens generated text & suggested replies (toxicity, harassment, defamation, medical/financial claims).
+* “Why am I seeing this?” button shows **short rationale** from the LLM output.
+* Rate-limit & cost controls (see §10).
+
+---
+
+# 6) Flutter implementation plan (client)
+
+**State & storage**
+
+* State: **Riverpod** or **Bloc**.
+* Storage: **Hive** (fast key-value) + **Drift/SQLite** (events).
+* Background: **Isolates** for local summarization; schedule via **workmanager**.
+
+**Event capture (Dart)**
+
+```dart
+class ActionEvent {
+  final String postId;
+  final String type; // view, like, skip, comment, share
+  final int timestampMs;
+  final int? dwellMs;
+
+  ActionEvent(this.postId, this.type, this.timestampMs, {this.dwellMs});
+}
+
+final actionSink = StreamController<ActionEvent>.broadcast();
+
+void onPostVisible(String id) =>
+  actionSink.add(ActionEvent(id, 'view', DateTime.now().millisecondsSinceEpoch));
+
+void onSkip(String id, int dwellMs) =>
+  actionSink.add(ActionEvent(id, 'skip', DateTime.now().millisecondsSinceEpoch, dwellMs: dwellMs));
+```
+
+**Periodic summarizer**
+
+```dart
+Future<Summary> buildSummary(List<ActionEvent> events) async {
+  final views = events.where((e)=>e.type=='view').length;
+  final skips = events.where((e)=>e.type=='skip').length;
+  final likes = events.where((e)=>e.type=='like').length;
+  final avgShortWatch = _avgDwell(events.where((e)=>e.dwellMs!=null && e.dwellMs!<15000));
+  return Summary(
+    counts: {'views':views,'skips':skips,'likes':likes},
+    avgWatchMs: {'shorts':avgShortWatch},
+    mood: _inferMood(events) // fast heuristic
+  );
+}
+```
+
+**Applying UI decisions**
+
+```dart
+void applyUiDecision(UiDecision d) {
+  ref.read(layoutProvider.notifier).update((_) => d.layout);
+  ref.read(feedRulesProvider.notifier).update((_) => d.feedRules);
+}
+```
+
+**Unified feed widget (pseudo)**
+
+```dart
+class UnifiedFeed extends ConsumerWidget {
+  @override
+  Widget build(context, ref) {
+    final items = ref.watch(rankedFeedProvider); // already reranked server-side
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (_, i) => FeedCard(item: items[i]),
+    );
+  }
+}
+```
+
+---
+
+# 7) Backend architecture
+
+**Services**
+
+* **Gateway API** (NestJS/FastAPI): auth, sessions, rate limits.
+* **Social Connectors** (per platform): runs ingestion via official SDKs/APIs.
+* **Normalizer**: maps everything to a common **Post** schema.
+* **Vector Store** (Qdrant/PGvector): captions/titles/alt-text embeddings per post.
+* **Decision Engine**:
+
+  * Bandit store (per user, per arm).
+  * LLM Orchestrator (system prompts + JSON outputs).
+  * Safety filter.
+* **Notification Orchestrator**: pulls platform events, bundles, LLM rewrites.
+* **Audit/Telemetry**: for explainability and rollback.
+
+**Unified Post schema**
+
+```json
+{
+  "id":"yt:abc",
+  "platform":"youtube",
+  "url":"https://youtu.be/...",
+  "type":"short|longform|image|thread|live",
+  "creator":{"handle":"@hardwareguy","id":"123"},
+  "text":"caption or title",
+  "tags":["ai","photography"],
+  "duration_s": 42,
+  "stats":{"likes":1200,"comments":98,"views":30000},
+  "time_published":"2025-08-28T14:32:00Z",
+  "thumbnail":"https://..."
+}
+```
+
+**Key endpoints**
+
+```
+POST /v1/summary -> returns UiDecision + feed_rules
+POST /v1/rank    -> returns ranked list of post ids with reasons
+POST /v1/draft   -> returns cross-platform caption/reply variants
+POST /v1/notify  -> returns bundled notifications + suggested actions
+```
+
+---
+
+# 8) Prompt kits (copy/paste)
+
+**UI Agent (system)**
+
+```
+You output UI decisions for a social media super-app.
+Input: user_summary + recent engagement. Optimize satisfaction, reduce spam, respect privacy.
+Output strictly JSON: layout, feature_flags, feed_rules.
+Prefer diversity across creators and formats; avoid repetitive topics.
+```
+
+**Ranking Agent (system)**
+
+```
+You rerank candidates for maximum satisfaction this session.
+Balance: (relevance + novelty + creator-affinity + time-decay + diversity).
+Downrank ads and known low-quality patterns from feed_rules.
+Return JSON: {order:[], notes:{why:{postId:reason}}}
+```
+
+**Creator/Reply Agent (system)**
+
+```
+You write concise, platform-native captions and replies.
+Mimic user's brand voice profile. Never promise facts you can't verify.
+Return 3 variants per platform with hashtags optional.
+```
+
+**Notification Agent (system)**
+
+```
+You cluster notifications into 1-3 actionable bundles.
+Highlight high-affinity creators and comments needing replies.
+Return JSON with items, priority, and one-line summaries.
+```
+
+**Safety Agent (system)**
+
+```
+You are a strict safety filter. Block harassment, NSFW, hate, scams.
+Return {allowed:true|false, issues:[...], safe_suggestion:"..."}.
+```
+
+---
+
+# 9) UX patterns that feel “revolutionary”
+
+* **Command Bar** (like Spotlight): “post this video to X with a fun caption” → executes.
+* **Live Auto-Summary Overlay** on long videos/threads (tap to expand into key moments).
+* **Why This Post** pill (tap → short rationale + mute/boost options).
+* **Session Mode Chips**: *Deep Dive*, *Quick Hits*, *Only Friends*, *Learning*.
+* **Creator Affinity Bubbles** that float to the top when those creators post.
+
+---
+
+# 10) Cost, latency, and quality controls
+
+* Cache LLM outputs (layout, rules) for **10–30 min** unless a strong behavior shift occurs.
+* Use **small model** for frequent tasks (ranking notes); **bigger model** for drafting cross-posts or complex rewrites.
+* **Token budget guard**: truncate candidate metadata; send *top-N features only*.
+* **A/B switch** to compare “bandit only” vs “bandit + LLM rerank”.
+
+---
+
+# 11) Roadmap (  MVP → v1) 
+
+  
+
+* OAuth for 2–3 platforms (start with YouTube + X + Instagram basic).
+* Ingestion + normalizer + unified feed (no LLM).
+* On-device action logging + summarizer.
+
+
+
+
+* Bandit ranking + explainability.
+* LLM UI Agent → apply layout decisions.
+
+  
+
+* LLM Rerank top-100 → top-25.
+* Command Bar (intent → actions across platforms).
+
+
+
+* Creator/Reply Agent (draft captions/replies with safety).
+* Notification Agent (clustering + rewrite).
+
+  
+
+* Polishing: “Why this post?”, privacy modes, caches, token budgets.
+* Private beta, metrics: retention, session length, satisfaction taps.
+
+---
+
+# 12) What to build first (tiny slice demo)
+
+* **Single screen** unified feed (static sample posts).
+* **Action logger** (views/skips/likes).
+* **“Improve my feed” button** that calls ChatGPT with the summary and applies returned layout/rules live (you’ll *feel* the magic immediately).
+* **Command Bar** with 3 hardcoded intents.
+
+---
+
+based on the above file , it is UI. based on its theme, assume everything need in assets folder ( i have prepared asset folder). Modern and advance UI is very much aesthetic /smooth and dynamically controlled by ChatGPT API. Use multiple advance decision layers of ChatGpt.
+make a complete social media app in flutter for large scale. this app should be advance.  
+make frontend as well as backend. make the backend very much strong and advance for AWS and use multiple advance decision layers of ChatGpt . The backend should be very much intelligent.  write complete code. it should be for all countries in the world. 
+this app should be very advanced in all aspects.
+
+
+
