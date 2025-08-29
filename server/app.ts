@@ -9,19 +9,19 @@ import { Redis } from 'ioredis';
 import winston from 'winston';
 
 // Import routes
-import authRoutes from './routes/auth.js';
-import feedRoutes from './routes/feed.js';
-import aiRoutes from './routes/ai.js';
-import socialRoutes from './routes/social.js';
+import authRoutes from './routes/auth.ts';
+import feedRoutes from './routes/feed.ts';
+import aiRoutes from './routes/ai.ts';
+import socialRoutes from './routes/social.ts';
 
 // Import middleware
-import { authMiddleware } from './middleware/auth.js';
-import { rateLimitMiddleware } from './middleware/rateLimit.js';
-import { securityMiddleware } from './middleware/security.js';
+import { authMiddleware } from './middleware/auth.ts';
+import { rateLimitMiddleware } from './middleware/rateLimit.ts';
+import { securityMiddleware } from './middleware/security.ts';
 
 // Import services
-import { initializeMongoDB } from './database/mongodb.js';
-import { initializeRedis } from './database/redis.js';
+import { initializeMongoDB } from './database/mongodb.ts';
+import { initializeRedis } from './database/redis.ts';
 
 dotenv.config();
 
@@ -70,7 +70,7 @@ app.use('/api/social', authMiddleware, socialRoutes);
 // WebSocket server for real-time features
 const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-interface ExtendedWebSocket extends WebSocket {
+interface ExtendedWebSocket extends import('ws').WebSocket {
   userId?: string;
   isAlive?: boolean;
 }
@@ -154,8 +154,8 @@ async function initializeApp() {
     await initializeMongoDB();
     await initializeRedis();
     
-    const PORT = process.env.PORT || 8000;
-    httpServer.listen(PORT, '0.0.0.0', () => {
+    const PORT = parseInt(process.env.PORT || '8000');
+    httpServer.listen(PORT, 'localhost', () => {
       logger.info(`Server running on port ${PORT}`);
       logger.info(`WebSocket server available at ws://localhost:${PORT}/ws`);
     });

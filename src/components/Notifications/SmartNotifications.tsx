@@ -362,7 +362,7 @@ const SmartNotifications: React.FC = () => {
           <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium">
             +{bundledNotifications.length - 3} more notifications
           </button>
-        </div>
+        </motion.div>
       )}
 
       {/* Toast container styles */}

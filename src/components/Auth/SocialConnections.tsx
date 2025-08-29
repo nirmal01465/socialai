@@ -479,7 +479,7 @@ const SocialConnections: React.FC<SocialConnectionsProps> = ({ onComplete, showS
             </p>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

@@ -195,7 +195,7 @@ const UnifiedFeed: React.FC = () => {
           >
             Connect Accounts
           </button>
-        </div>
+        </motion.div>
       </div>
     );
   }
