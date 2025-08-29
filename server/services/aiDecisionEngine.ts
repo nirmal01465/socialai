@@ -1,944 +1,1009 @@
-import { openaiService } from './openai.js';
+import { OpenAI } from 'openai';
 import { behaviorAnalytics } from './behaviorAnalytics.js';
-import Post from '../models/Post.js';
-import User from '../models/User.js';
+import { contentNormalizer } from './contentNormalizer.js';
 import { getRedisClient } from '../database/redis.js';
 
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+interface DecisionContext {
+  userId: string;
+  behaviorSummary: any;
+  contentCandidates?: any[];
+  sessionContext?: any;
+  intent?: string;
+}
+
 interface UIDecision {
+  version: string;
   layout: {
     sections: Array<{
       id: string;
       priority: number;
       visible: boolean;
+      style?: string;
     }>;
-    featureFlags: { [key: string]: boolean };
+    feedColumns: number;
+    cardStyle: 'minimal' | 'detailed' | 'immersive';
+    showSidebar: boolean;
+    adaptiveFeatures: {
+      autoSummary: boolean;
+      contextualSuggestions: boolean;
+      smartNotifications: boolean;
+      realTimeAdaptation: boolean;
+    };
+  };
+  featureFlags: {
+    [key: string]: boolean;
   };
   feedRules: {
     blocklist: string[];
     boostTags: string[];
+    preferredContentTypes: string[];
+    diversityWeight: number;
+    moodOptimization: boolean;
   };
-  reasoning?: string;
 }
 
-interface RankingRequest {
-  userId: string;
-  behaviorSummary: any;
-  posts: any[];
-  intent: string;
-  sessionMode: string;
-}
-
-interface RankingResult {
-  rankedPosts: any[];
-  uiDecisions: UIDecision;
-  explanations: { [postId: string]: string };
-  sessionInsights: any;
-}
-
-interface CommandRequest {
-  userId: string;
-  command: string;
-  context: any;
-  behaviorSummary: any;
-  userProfile: any;
-}
-
-interface ContentSuggestionRequest {
-  userId: string;
-  type: string;
-  input: string;
-  platform?: string;
-  tone: string;
-  userProfile: any;
-  behaviorSummary: any;
-}
-
-class AIDecisionEngineService {
-  
-  // Get AI-powered ranking and UI decisions
-  async getRankingAndUIDecisions(request: RankingRequest): Promise<RankingResult> {
+// Revolutionary Multi-Agent AI Decision Engine
+class AIDecisionEngine {
+  private async callOpenAI(prompt: string, systemPrompt: string, maxTokens = 2000): Promise<any> {
     try {
-      const { userId, behaviorSummary, posts, intent, sessionMode } = request;
-
-      // Get UI decisions first
-      const uiDecisions = await this.getUIDecisions({
-        userId,
-        behaviorSummary,
-        sessionData: { intent, mode: sessionMode }
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.3,
+        response_format: { type: "json_object" }
       });
 
-      // Rank posts using AI
-      const rankedPosts = await this.rankPosts(posts, behaviorSummary, uiDecisions, intent);
+      const content = completion.choices[0]?.message?.content;
+      if (!content) throw new Error('No response from OpenAI');
 
-      // Generate explanations for top posts
-      const explanations = await this.generateExplanations(rankedPosts.slice(0, 10), behaviorSummary);
-
-      // Get session insights
-      const sessionInsights = await this.getSessionInsights(behaviorSummary, sessionMode);
-
-      return {
-        rankedPosts,
-        uiDecisions,
-        explanations,
-        sessionInsights
-      };
-
+      return JSON.parse(content);
     } catch (error) {
-      console.error('AI decision engine error:', error);
-      return this.getFallbackResult(request.posts);
+      console.error('AI Decision Engine error:', error);
+      return this.getIntelligentFallback(prompt, systemPrompt);
     }
   }
 
-  // Get UI layout decisions based on user behavior
-  async getUIDecisions(params: {
-    userId: string;
-    behaviorSummary: any;
-    sessionData?: any;
-    currentLayout?: any;
-  }): Promise<UIDecision> {
-    try {
-      const { userId, behaviorSummary, sessionData = {}, currentLayout = {} } = params;
-
-      // Check cache first
-      const redis = getRedisClient();
-      const cacheKey = `ui_decisions:${userId}`;
-      const cached = await redis.get(cacheKey);
-      
-      if (cached) {
-        return JSON.parse(cached);
-      }
-
-      // Prepare context for AI
-      const context = {
-        userSummary: {
-          totalEvents: behaviorSummary.totalEvents,
-          topTags: behaviorSummary.topTags?.slice(0, 10),
-          scrollSpeed: behaviorSummary.scrollBehavior?.scrollSpeed,
-          avgSessionDuration: behaviorSummary.avgSessionDuration,
-          engagementPatterns: behaviorSummary.engagementPatterns,
-          moodIndicators: behaviorSummary.moodIndicators
-        },
-        sessionData,
-        currentLayout
-      };
-
-      // Get AI recommendations
-      const aiResponse = await openaiService.generateUIRecommendations(context);
-
-      const uiDecisions: UIDecision = {
+  private getIntelligentFallback(prompt: string, systemPrompt: string): any {
+    // Intelligent fallback with contextual defaults
+    if (systemPrompt.includes('UI Intelligence')) {
+      return {
+        version: "1.0",
         layout: {
-          sections: aiResponse.layout?.sections || this.getDefaultSections(behaviorSummary),
-          featureFlags: aiResponse.layout?.featureFlags || this.getDefaultFeatureFlags(behaviorSummary)
+          sections: [
+            { id: "unified_feed", priority: 0, visible: true, style: "adaptive" },
+            { id: "trending", priority: 1, visible: true, style: "compact" },
+            { id: "discover", priority: 2, visible: true, style: "minimal" }
+          ],
+          feedColumns: 1,
+          cardStyle: "detailed",
+          showSidebar: false,
+          adaptiveFeatures: {
+            autoSummary: true,
+            contextualSuggestions: true,
+            smartNotifications: true,
+            realTimeAdaptation: true
+          }
+        },
+        featureFlags: {
+          commandBar: true,
+          whyThisPost: true,
+          sessionModes: true,
+          creatorAffinity: true
         },
         feedRules: {
-          blocklist: aiResponse.feedRules?.blocklist || [],
-          boostTags: aiResponse.feedRules?.boostTags || behaviorSummary.topTags?.slice(0, 5) || []
-        },
-        reasoning: aiResponse.reasoning
-      };
-
-      // Cache for 20 minutes
-      await redis.setex(cacheKey, 1200, JSON.stringify(uiDecisions));
-
-      return uiDecisions;
-
-    } catch (error) {
-      console.error('UI decisions error:', error);
-      return this.getDefaultUIDecisions();
-    }
-  }
-
-  // Rank posts using AI with behavioral context
-  private async rankPosts(posts: any[], behaviorSummary: any, uiDecisions: UIDecision, intent: string): Promise<any[]> {
-    try {
-      if (posts.length === 0) return [];
-
-      // Apply pre-filtering based on UI decisions
-      let filteredPosts = posts.filter(post => {
-        // Apply blocklist
-        if (uiDecisions.feedRules.blocklist.some(blocked => 
-          post.text?.toLowerCase().includes(blocked.toLowerCase()) ||
-          post.tags?.some((tag: string) => tag.toLowerCase().includes(blocked.toLowerCase()))
-        )) {
-          return false;
+          blocklist: ["spam", "low_quality"],
+          boostTags: ["trending", "ai", "technology"],
+          preferredContentTypes: ["video", "image", "article"],
+          diversityWeight: 0.7,
+          moodOptimization: true
         }
-        return true;
-      });
-
-      // Boost posts with preferred tags
-      filteredPosts = filteredPosts.map(post => ({
-        ...post,
-        aiBoostScore: this.calculateBoostScore(post, uiDecisions.feedRules.boostTags, behaviorSummary)
-      }));
-
-      // If too many posts, use AI ranking for top candidates
-      if (filteredPosts.length > 50) {
-        // Use heuristic ranking first
-        filteredPosts = this.heuristicRanking(filteredPosts, behaviorSummary);
-        filteredPosts = filteredPosts.slice(0, 50);
-      }
-
-      // AI reranking for final order
-      const aiRankedPosts = await this.aiRerank(filteredPosts, behaviorSummary, intent);
-
-      return aiRankedPosts;
-
-    } catch (error) {
-      console.error('Post ranking error:', error);
-      return this.fallbackRanking(posts, behaviorSummary);
+      };
     }
+    
+    if (systemPrompt.includes('Command Intelligence')) {
+      return {
+        success: true,
+        action: "acknowledge",
+        parameters: { message: "Command understood but AI temporarily offline" },
+        explanation: "Using intelligent defaults while AI reconnects",
+        suggestions: ["Try 'show trending posts'", "Filter by topic", "Create new post"],
+        confidence: 0.8
+      };
+    }
+    
+    return { error: "AI temporarily unavailable", fallback: true };
   }
 
-  // AI-powered reranking
-  private async aiRerank(posts: any[], behaviorSummary: any, intent: string): Promise<any[]> {
-    try {
-      const candidates = posts.map(post => ({
+  // ============ AGENT 1: UI INTELLIGENCE AGENT ============
+  async generateUIDecisions(context: DecisionContext): Promise<UIDecision> {
+    const systemPrompt = `You are the UI Intelligence Agent for a revolutionary social media super-app.
+
+MISSION: Generate adaptive UI configurations that transform in real-time based on user behavior patterns.
+
+BEHAVIORAL ANALYSIS CAPABILITIES:
+- Detect user energy levels from scroll velocity and interaction patterns
+- Identify session intent (quick browsing, deep engagement, discovery, focus)
+- Analyze cognitive load tolerance from skip rates and dwell times
+- Predict optimal content density and visual hierarchy
+- Adapt to time-of-day and contextual preferences
+
+REVOLUTIONARY ADAPTATIONS:
+- MORNING (6-9am): News priority, compact layout, trending emphasis
+- WORK HOURS (9-5pm): Minimal distractions, quick-scan cards, productivity focus
+- EVENING (5-9pm): Rich media, relaxed browsing, entertainment priority
+- NIGHT (9pm+): Dark mode optimization, longer content, discovery mode
+
+REAL-TIME INTELLIGENCE:
+- Fast scroll (>3 screens/sec) → Switch to minimal cards, reduce text
+- Long dwell (>30s/post) → Enable detailed view, show related content
+- High skip rate (>70%) → Increase diversity, reset recommendations
+- Low engagement → Inject trending content, boost familiar creators
+
+SESSION MODES:
+- Quick Hits: Bite-sized content, high variety, minimal friction
+- Deep Dive: Longer content, topic clusters, educational focus  
+- Discovery: 40% outside comfort zone, new creators, emerging trends
+- Focus: Single topic exploration, expert content, learning paths
+
+OUTPUT: Valid JSON matching UIDecision interface. Be revolutionary in adaptations while maintaining usability.`;
+
+    const userPrompt = JSON.stringify({
+      userId: context.userId,
+      behaviorSummary: context.behaviorSummary,
+      sessionContext: {
+        ...context.sessionContext,
+        timeOfDay: new Date().getHours(),
+        dayOfWeek: new Date().getDay(),
+        deviceType: "mobile",
+        sessionDuration: context.sessionContext?.duration || 0,
+        scrollVelocity: context.behaviorSummary?.scrollBehavior?.scrollSpeed || "medium",
+        engagementRate: context.behaviorSummary?.engagementPatterns?.engagementRate || 0.1
+      },
+      currentMood: this.inferMoodFromBehavior(context.behaviorSummary),
+      timestamp: new Date().toISOString()
+    });
+
+    const decision = await this.callOpenAI(userPrompt, systemPrompt);
+    
+    // Cache UI decisions for 15 minutes or until behavior significantly changes
+    const redis = getRedisClient();
+    await redis.setex(`ui_decisions:${context.userId}`, 900, JSON.stringify(decision));
+
+    return decision;
+  }
+
+  // ============ AGENT 2: CONTENT RANKING INTELLIGENCE ============
+  async rankContent(context: DecisionContext): Promise<{
+    rankedIds: string[];
+    explanations: Record<string, string>;
+    diversityScore: number;
+    sessionOptimization: string;
+    confidenceScore: number;
+    adaptiveInsights: any;
+  }> {
+    const systemPrompt = `You are the Content Ranking Intelligence Agent.
+
+MISSION: Create the perfect content mix for maximum user satisfaction using advanced behavioral analysis.
+
+RANKING ALGORITHM (Revolutionary Multi-Factor):
+1. BEHAVIORAL ALIGNMENT (35%):
+   - Match proven interests from engagement history
+   - Detect emerging interest patterns from recent behavior
+   - Consider time-based preference shifts (morning news vs evening entertainment)
+   - Factor in mood indicators from interaction patterns
+
+2. TEMPORAL INTELLIGENCE (25%):
+   - Trending momentum analysis (velocity of engagement growth)
+   - Freshness with context (breaking news vs evergreen content)
+   - Personal timing optimization (when user typically engages with similar content)
+   - Platform-specific peak times
+
+3. CREATOR AFFINITY (20%):
+   - Historical engagement with specific creators
+   - Parasocial relationship strength indicators
+   - Creator consistency and quality scores
+   - Cross-platform creator presence
+
+4. DIVERSITY INJECTION (15%):
+   - Prevent filter bubbles with intelligent variety
+   - Introduce adjacent interests with high success probability
+   - Serendipity moments for discovery
+   - Balanced perspective representation
+
+5. QUALITY SIGNALS (5%):
+   - Content completion rates
+   - Engagement quality (comments vs passive consumption)
+   - User satisfaction indicators
+   - Anti-spam and authenticity markers
+
+REVOLUTIONARY FEATURES:
+- MOOD-BASED RANKING: Adapt content emotional tone to user's current state
+- COGNITIVE LOAD BALANCING: Mix heavy and light content based on user capacity
+- ATTENTION SPAN OPTIMIZATION: Vary content length based on session patterns
+- CROSS-PLATFORM INTELLIGENCE: Leverage behavior from all connected platforms
+
+SESSION OPTIMIZATION STRATEGIES:
+- "Dopamine Regulation": Balance instant gratification with meaningful content
+- "Learning Path Creation": Build knowledge progression through related content
+- "Social Discovery": Surface content from user's extended network
+- "Trend Participation": Enable user to join relevant conversations
+
+OUTPUT: JSON with rankedIds array, detailed explanations, diversityScore (0-1), sessionOptimization strategy, confidenceScore, adaptiveInsights.`;
+
+    const userPrompt = JSON.stringify({
+      behaviorSummary: {
+        ...context.behaviorSummary,
+        recentEngagements: context.behaviorSummary?.recentEngagements?.slice(0, 20),
+        moodIndicators: this.extractMoodIndicators(context.behaviorSummary),
+        attentionSpan: this.calculateAttentionSpan(context.behaviorSummary),
+        cognitiveLoad: this.assessCognitiveLoad(context.sessionContext)
+      },
+      candidates: context.contentCandidates?.slice(0, 100).map(post => ({
         id: post.id,
         type: post.type,
-        tags: post.tags?.slice(0, 5) || [],
-        creator: post.creator.handle,
         platform: post.platform,
+        creator: post.creator,
+        tags: post.tags?.slice(0, 8),
         stats: post.stats,
-        aiBoostScore: post.aiBoostScore || 0,
-        text_preview: post.text?.substring(0, 200)
-      }));
-
-      const prompt = `You are a feed reranker optimizing satisfaction for this user.
-Consider user_summary, session_intent, and request_intent.
-Return top ${Math.min(candidates.length, 25)} items ranked by relevance.
-Output JSON: {"order": ["post_id1", "post_id2", ...], "notes": {"diversity": ["topic1", "topic2"], "downrank": ["reason1"]}}`;
-
-      const userContext = {
-        user_summary: {
-          top_tags: behaviorSummary.topTags?.slice(0, 5) || [],
-          scroll_behavior: behaviorSummary.scrollBehavior?.scrollSpeed || 'medium',
-          engagement_style: this.getEngagementStyle(behaviorSummary.engagementPatterns),
-          mood: behaviorSummary.moodIndicators?.[0] || 'neutral'
-        },
-        request_intent: intent,
-        candidates
-      };
-
-      const response = await openaiService.processCommand(prompt, userContext);
-      
-      if (response.order && Array.isArray(response.order)) {
-        const rankedPosts = response.order
-          .map((id: string) => posts.find(p => p.id === id))
-          .filter(Boolean);
-        
-        // Add any remaining posts
-        const remainingPosts = posts.filter(p => !response.order.includes(p.id));
-        return [...rankedPosts, ...remainingPosts];
-      }
-
-      return posts;
-
-    } catch (error) {
-      console.error('AI reranking error:', error);
-      return posts;
-    }
-  }
-
-  // Calculate boost score for posts
-  private calculateBoostScore(post: any, boostTags: string[], behaviorSummary: any): number {
-    let score = 0;
-
-    // Tag matching
-    if (post.tags && boostTags.length > 0) {
-      const matchingTags = post.tags.filter((tag: string) => 
-        boostTags.some(boost => boost.toLowerCase().includes(tag.toLowerCase()))
-      );
-      score += matchingTags.length * 2;
-    }
-
-    // Creator preference
-    if (behaviorSummary.topCreators?.includes(post.creator?.handle)) {
-      score += 3;
-    }
-
-    // Content type preference
-    if (behaviorSummary.preferredContentTypes?.includes(post.type)) {
-      score += 1;
-    }
-
-    // Engagement potential
-    const totalEngagement = (post.stats?.likes || 0) + (post.stats?.comments || 0) + (post.stats?.shares || 0);
-    if (totalEngagement > 100) score += 1;
-    if (totalEngagement > 1000) score += 2;
-
-    return score;
-  }
-
-  // Heuristic ranking for pre-filtering
-  private heuristicRanking(posts: any[], behaviorSummary: any): any[] {
-    return posts.sort((a, b) => {
-      // Time decay (newer is better)
-      const timeA = new Date(a.timePublished).getTime();
-      const timeB = new Date(b.timePublished).getTime();
-      const timeScore = (timeB - timeA) / (1000 * 60 * 60); // Hours difference
-
-      // Engagement score
-      const engagementA = (a.stats?.likes || 0) + (a.stats?.comments || 0) * 2 + (a.stats?.shares || 0) * 3;
-      const engagementB = (b.stats?.likes || 0) + (b.stats?.comments || 0) * 2 + (b.stats?.shares || 0) * 3;
-
-      // AI boost score
-      const boostA = a.aiBoostScore || 0;
-      const boostB = b.aiBoostScore || 0;
-
-      // Combined score
-      const scoreA = timeScore * 0.3 + Math.log(engagementA + 1) * 0.4 + boostA * 0.3;
-      const scoreB = timeScore * 0.3 + Math.log(engagementB + 1) * 0.4 + boostB * 0.3;
-
-      return scoreB - scoreA;
+        content_length: post.text?.length || 0,
+        media_type: post.content?.media?.[0]?.type,
+        sentiment: post.sentiment || 0,
+        complexity_score: this.calculateComplexity(post),
+        freshness_hours: this.getContentAge(post.timePublished)
+      })),
+      intent: context.intent || 'balanced_discovery',
+      sessionContext: context.sessionContext,
+      currentTime: new Date().toISOString()
     });
+
+    return await this.callOpenAI(userPrompt, systemPrompt, 2500);
   }
 
-  // Process natural language commands
-  async processCommand(request: CommandRequest): Promise<any> {
-    try {
-      const { userId, command, context, behaviorSummary, userProfile } = request;
-
-      const commandContext = {
-        user_preferences: {
-          top_interests: behaviorSummary.topTags?.slice(0, 5) || [],
-          preferred_platforms: userProfile.connectedPlatforms?.map((p: any) => p.platform) || [],
-          engagement_style: this.getEngagementStyle(behaviorSummary.engagementPatterns)
-        },
-        available_actions: [
-          'filter_content', 'search_posts', 'create_post', 'cross_post', 
-          'get_analytics', 'schedule_post', 'find_trending', 'get_recommendations'
-        ],
-        context
-      };
-
-      const response = await openaiService.processCommand(command, commandContext);
-
-      // Execute the determined action
-      return await this.executeCommand(response, userId);
-
-    } catch (error) {
-      console.error('Command processing error:', error);
-      return {
-        success: false,
-        message: 'Sorry, I couldn\'t understand that command. Please try rephrasing.',
-        suggestions: ['Show me trending posts', 'Filter by AI content', 'Post to Instagram']
-      };
-    }
-  }
-
-  // Execute parsed command
-  private async executeCommand(commandResponse: any, userId: string): Promise<any> {
-    const { action, parameters, confidence } = commandResponse;
-
-    if (confidence < 0.7) {
-      return {
-        success: false,
-        message: 'I\'m not sure I understood correctly. Could you be more specific?',
-        interpretation: commandResponse.intent
-      };
-    }
-
-    switch (action) {
-      case 'filter_content':
-        return await this.executeContentFilter(parameters, userId);
-      case 'search_posts':
-        return await this.executeSearch(parameters, userId);
-      case 'create_post':
-        return await this.executePostCreation(parameters, userId);
-      default:
-        return {
-          success: true,
-          message: `I understand you want to ${action}. This feature is being processed.`,
-          action,
-          parameters
-        };
-    }
-  }
-
-  // Generate content suggestions
-  async generateContentSuggestions(request: ContentSuggestionRequest): Promise<any> {
-    try {
-      const { userId, type, input, platform, tone, userProfile, behaviorSummary } = request;
-
-      switch (type) {
-        case 'caption':
-          return await this.generateCaptions(input, platform, tone, behaviorSummary);
-        case 'reply':
-          return await this.generateReplies(input, tone, behaviorSummary);
-        case 'hashtags':
-          return await this.generateHashtags(input, platform, behaviorSummary);
-        case 'cross_post':
-          return await this.generateCrossPosts(input, userProfile.connectedPlatforms, tone);
-        default:
-          throw new Error(`Unsupported content type: ${type}`);
-      }
-
-    } catch (error) {
-      console.error('Content suggestion error:', error);
-      return {
-        suggestions: [input], // Fallback to original input
-        type,
-        error: 'Failed to generate AI suggestions'
-      };
-    }
-  }
-
-  // Generate captions for posts
-  private async generateCaptions(input: string, platform: string = 'instagram', tone: string, behaviorSummary: any): Promise<any> {
-    const suggestions = await openaiService.adaptContentForPlatform(input, platform, tone);
-    
-    return {
-      suggestions,
-      platform,
-      tone,
-      optimizations: {
-        hashtag_suggestions: await openaiService.generateHashtags(input, platform, 5),
-        engagement_tips: this.getEngagementTips(platform, behaviorSummary)
-      }
-    };
-  }
-
-  // Generate reply suggestions
-  private async generateReplies(input: string, tone: string, behaviorSummary: any): Promise<any> {
-    const prompt = `Generate 3 ${tone} reply suggestions for this comment/post: "${input}"`;
-    const response = await openaiService.processCommand(prompt, { tone, context: 'reply' });
-    
-    return {
-      suggestions: response.suggestions || [
-        'Thanks for sharing this!',
-        'Interesting perspective.',
-        'I appreciate your thoughts on this.'
-      ],
-      tone
-    };
-  }
-
-  // Generate hashtag suggestions
-  private async generateHashtags(input: string, platform: string = 'instagram', behaviorSummary: any): Promise<any> {
-    const hashtags = await openaiService.generateHashtags(input, platform, 15);
-    
-    // Mix with user's preferred tags
-    const userTags = behaviorSummary.topTags?.slice(0, 5) || [];
-    const combinedTags = [...new Set([...hashtags, ...userTags])];
-    
-    return {
-      hashtags: combinedTags.slice(0, 15),
-      categories: {
-        trending: hashtags.slice(0, 5),
-        personal: userTags,
-        niche: hashtags.slice(5, 10)
-      }
-    };
-  }
-
-  // Generate cross-platform posts
-  private async generateCrossPosts(input: string, connectedPlatforms: any[], tone: string): Promise<any> {
-    const crossPosts: { [platform: string]: string[] } = {};
-    
-    for (const platformConn of connectedPlatforms) {
-      if (platformConn.isActive) {
-        const platform = platformConn.platform;
-        crossPosts[platform] = await openaiService.adaptContentForPlatform(input, platform, tone);
-      }
-    }
-    
-    return {
-      crossPosts,
-      tone,
-      platforms: Object.keys(crossPosts)
-    };
-  }
-
-  // Analyze post engagement potential
-  async analyzeEngagementPotential(params: {
-    userId: string;
-    content: string;
-    platform: string;
-    metadata?: any;
-  }): Promise<any> {
-    try {
-      const { content, platform, metadata = {} } = params;
-
-      const analysis = await openaiService.analyzeContent(content);
-      
-      // Calculate engagement score based on multiple factors
-      const baseScore = analysis.engagementPotential;
-      const platformMultiplier = this.getPlatformEngagementMultiplier(platform);
-      const lengthOptimality = this.getOptimalLengthScore(content, platform);
-      
-      const finalScore = Math.min(10, baseScore * platformMultiplier * lengthOptimality);
-
-      return {
-        engagementScore: Math.round(finalScore * 10) / 10,
-        analysis: {
-          sentiment: analysis.sentiment,
-          topics: analysis.topics,
-          contentType: analysis.contentType,
-          complexity: analysis.complexity
-        },
-        recommendations: await this.getEngagementRecommendations(analysis, platform),
-        optimizations: {
-          suggestedHashtags: await openaiService.generateHashtags(content, platform, 8),
-          bestPostingTime: this.suggestOptimalTiming(platform),
-          audienceMatch: this.analyzeAudienceMatch(analysis.topics, platform)
-        }
-      };
-
-    } catch (error) {
-      console.error('Engagement analysis error:', error);
-      return {
-        engagementScore: 5,
-        analysis: { sentiment: { rating: 3, confidence: 0.5 } },
-        recommendations: ['Consider adding more engaging content'],
-        error: 'Analysis failed'
-      };
-    }
-  }
-
-  // Generate smart notifications
-  async generateSmartNotifications(params: {
-    userId: string;
-    userProfile: any;
-    behaviorSummary: any;
-  }): Promise<any> {
-    try {
-      // This would typically fetch real notifications from platforms
-      // For now, we'll generate contextual notifications
-      
-      const notifications = [
-        {
-          id: 'ai_suggestion_1',
-          type: 'content_suggestion',
-          title: 'Perfect Time to Post',
-          message: 'Based on your audience activity, now is a great time to share content.',
-          priority: 'medium',
-          actionable: true,
-          actions: ['Create Post', 'Schedule Later']
-        },
-        {
-          id: 'ai_insight_1',
-          type: 'insight',
-          title: 'Your Photography Posts Are Trending',
-          message: 'Your recent photography content got 40% more engagement than usual.',
-          priority: 'low',
-          actionable: false
-        }
-      ];
-
-      return {
-        notifications,
-        summary: {
-          total: notifications.length,
-          actionable: notifications.filter(n => n.actionable).length,
-          highPriority: notifications.filter(n => n.priority === 'high').length
-        }
-      };
-
-    } catch (error) {
-      console.error('Smart notifications error:', error);
-      return { notifications: [], summary: { total: 0, actionable: 0, highPriority: 0 } };
-    }
-  }
-
-  // Explain AI decisions
-  async explainDecision(params: {
-    userId: string;
-    post: any;
+  // ============ AGENT 3: COMMAND INTELLIGENCE AGENT ============
+  async processCommand(context: DecisionContext & { command: string }): Promise<{
+    success: boolean;
     action: string;
-    includePersonalization?: boolean;
-  }): Promise<any> {
-    try {
-      const { post, action, includePersonalization = true } = params;
+    parameters: any;
+    explanation: string;
+    suggestions: string[];
+    confidence: number;
+    executionPlan: any;
+  }> {
+    const systemPrompt = `You are the Command Intelligence Agent for natural language social media control.
 
-      const explanation = {
-        action,
-        reasoning: await this.generateExplanationText(post, action),
-        factors: this.getDecisionFactors(post, action),
-        personalization: includePersonalization ? {
-          basedOnYourInterests: post.tags?.filter((tag: string) => 
-            tag.toLowerCase().includes('ai') || tag.toLowerCase().includes('tech')
-          ) || [],
-          similarToLikedContent: true,
-          optimalForYourSchedule: true
-        } : null
-      };
+MISSION: Transform user intent into precise, executable actions with revolutionary understanding capabilities.
 
-      return explanation;
+SUPPORTED COMMAND CATEGORIES:
 
-    } catch (error) {
-      console.error('Decision explanation error:', error);
-      return {
-        action,
-        reasoning: 'This content was selected based on your preferences and activity patterns.',
-        factors: ['relevance', 'timing', 'engagement_potential']
-      };
-    }
-  }
+1. CONTENT DISCOVERY & FILTERING:
+   - "Show me viral AI videos under 3 minutes"
+   - "Hide all crypto posts for next week"
+   - "Find posts about photography with high engagement"
+   - "Only show content from my close friends"
+   - "Trending posts in my interests from last 2 hours"
 
-  // Generate mood-based content filter
-  async generateMoodBasedFilter(params: {
-    userId: string;
-    currentMood?: string;
-    timeAvailable?: string;
-    contentGoal?: string;
-    behaviorSummary: any;
-  }): Promise<any> {
-    const { currentMood = 'neutral', timeAvailable = 'moderate', contentGoal = 'entertainment', behaviorSummary } = params;
+2. CONTENT CREATION & PUBLISHING:
+   - "Draft a witty reply to this comment"
+   - "Cross-post this to Twitter with professional tone"
+   - "Create Instagram caption for my beach photo"
+   - "Schedule post about my project for peak engagement time"
+   - "Generate hashtags for fitness content"
 
-    const filter = {
-      contentTypes: this.getMoodBasedContentTypes(currentMood, timeAvailable),
-      tags: this.getMoodBasedTags(currentMood, contentGoal, behaviorSummary),
-      creators: this.getMoodBasedCreators(currentMood, behaviorSummary),
-      duration: this.getMoodBasedDuration(timeAvailable),
-      priority: this.getMoodBasedPriority(currentMood, contentGoal)
-    };
+3. ACCOUNT MANAGEMENT & AUTOMATION:
+   - "Mute brand posts but keep creator content"
+   - "Boost all posts from @tech_influencer"
+   - "Auto-like posts from my close friends"
+   - "Set up notifications for mentions of my brand"
+   - "Follow accounts similar to @example_user"
 
-    return {
-      filter,
-      mood: currentMood,
-      timeAvailable,
-      contentGoal,
-      explanation: `Optimized for ${currentMood} mood with ${timeAvailable} time available, focusing on ${contentGoal}.`
-    };
-  }
+4. ANALYTICS & INSIGHTS:
+   - "Why am I seeing this post?"
+   - "Show my engagement trends this week"
+   - "What content performs best for me?"
+   - "Analyze sentiment of comments on my latest post"
+   - "Predict performance of this draft"
 
-  // Helper methods
-  private getDefaultSections(behaviorSummary: any): any[] {
-    const sections = [
-      { id: 'shorts', priority: 0, visible: true },
-      { id: 'longform', priority: 1, visible: true },
-      { id: 'threads', priority: 2, visible: true },
-      { id: 'trending', priority: 3, visible: true }
-    ];
+5. UI & EXPERIENCE CONTROL:
+   - "Switch to focus mode for next hour"
+   - "Hide stories and show only posts"
+   - "Enable dark mode with minimal distractions"
+   - "Show me the learning path view"
+   - "Compact layout for quick browsing"
 
-    // Adjust based on behavior
-    if (behaviorSummary.scrollBehavior?.scrollSpeed === 'fast') {
-      sections.find(s => s.id === 'shorts')!.priority = 0;
-      sections.find(s => s.id === 'longform')!.priority = 3;
-    }
+INTELLIGENCE FEATURES:
+- CONTEXT AWARENESS: Understand references to "this", "that", previous conversation
+- TEMPORAL UNDERSTANDING: Process relative time ("last week", "morning posts")
+- INTENT DISAMBIGUATION: Clarify ambiguous commands with smart suggestions
+- SAFETY VALIDATION: Prevent harmful or policy-violating commands
+- EXECUTION PLANNING: Break complex commands into sequential steps
 
-    return sections;
-  }
+RESPONSE INTELLIGENCE:
+- Provide clear explanation of what will happen
+- Suggest related commands user might want
+- Estimate execution time and success probability
+- Include safety warnings for potentially destructive actions
 
-  private getDefaultFeatureFlags(behaviorSummary: any): { [key: string]: boolean } {
-    return {
-      autoSummary: behaviorSummary.avgSessionDuration > 600,
-      downrankAds: behaviorSummary.engagementPatterns?.skipRate > 0.7,
-      showInsights: behaviorSummary.totalEvents > 100,
-      adaptiveLayout: true
-    };
-  }
+OUTPUT: JSON with success status, action type, parameters object, explanation, suggestions array, confidence score (0-1), executionPlan object.`;
 
-  private getDefaultUIDecisions(): UIDecision {
-    return {
-      layout: {
-        sections: [
-          { id: 'shorts', priority: 0, visible: true },
-          { id: 'longform', priority: 1, visible: true },
-          { id: 'trending', priority: 2, visible: true }
-        ],
-        featureFlags: {
-          autoSummary: false,
-          downrankAds: true,
-          showInsights: false,
-          adaptiveLayout: true
-        }
+    const userPrompt = JSON.stringify({
+      command: context.command,
+      userContext: {
+        behaviorSummary: context.behaviorSummary,
+        connectedPlatforms: context.sessionContext?.connectedPlatforms || [],
+        recentPosts: context.sessionContext?.recentPosts?.slice(0, 5) || [],
+        currentFeedView: context.sessionContext?.currentView || "unified_feed",
+        activeFilters: context.sessionContext?.activeFilters || []
       },
-      feedRules: {
-        blocklist: ['spam', 'low_quality'],
-        boostTags: ['technology', 'ai']
+      availableActions: [
+        'filter_content', 'search_posts', 'create_content', 'cross_post',
+        'manage_account', 'get_analytics', 'schedule_content', 'find_trending',
+        'get_recommendations', 'ui_control', 'automation_setup'
+      ],
+      timestamp: new Date().toISOString()
+    });
+
+    return await this.callOpenAI(userPrompt, systemPrompt);
+  }
+
+  // ============ AGENT 4: CREATOR INTELLIGENCE AGENT ============
+  async generateContentSuggestions(context: DecisionContext & {
+    type: 'caption' | 'reply' | 'hashtags' | 'cross_post' | 'story' | 'thread';
+    input: string;
+    platform?: string;
+    tone?: string;
+  }): Promise<{
+    suggestions: string[];
+    type: string;
+    platform?: string;
+    tone: string;
+    optimizationTips: string[];
+    estimatedPerformance: Record<string, number>;
+    viralPotential: number;
+    brandSafety: number;
+  }> {
+    const systemPrompt = `You are the Creator Intelligence Agent specializing in high-performing, platform-native content generation.
+
+MISSION: Generate viral-potential content that amplifies user voice while maximizing engagement and maintaining authenticity.
+
+PLATFORM EXPERTISE:
+
+INSTAGRAM:
+- Visual storytelling with emotional hooks
+- Strategic hashtag mixing (trending + niche + branded)
+- Story-to-post content funnel optimization
+- Carousel content for maximum engagement
+- Reels optimization for algorithm favorability
+
+TWITTER/X:
+- Thread narrative structure for complex ideas
+- Reply optimization for conversation starters
+- Trending topic integration with authentic voice
+- Quote tweet strategy for amplification
+- Space-friendly content for audio discussions
+
+YOUTUBE:
+- Hook-heavy descriptions for click-through
+- Community tab engagement optimization
+- Comment-to-content feedback loops
+- Shorts optimization for discovery
+- Long-form content value proposition
+
+TIKTOK:
+- Trend adaptation with unique spin
+- Audio-visual synchronization mastery
+- Viral mechanic integration (challenges, sounds)
+- Generation-specific humor and references
+- Cross-pollination with other platforms
+
+LINKEDIN:
+- Thought leadership positioning
+- Industry insight presentation
+- Professional storytelling
+- Networking conversation starters
+- Credibility establishment
+
+ADVANCED OPTIMIZATION FACTORS:
+
+TIMING INTELLIGENCE:
+- Platform-specific peak engagement windows
+- User's audience activity patterns
+- Trending topic momentum analysis
+- Cross-platform posting coordination
+
+VIRAL MECHANICS:
+- Emotional resonance triggers
+- Shareability factor optimization
+- Discussion catalyst integration
+- Meme potential assessment
+- Controversy balance (engagement vs safety)
+
+BRAND VOICE CONSISTENCY:
+- Tone adaptation while maintaining authenticity
+- Cross-platform voice translation
+- Audience expectation management
+- Personal brand evolution tracking
+
+PERFORMANCE PREDICTION:
+- Engagement rate estimation (likes, comments, shares)
+- Reach potential based on content quality
+- Virality probability scoring
+- Controversy risk assessment
+- Brand safety compliance verification
+
+OUTPUT: JSON with suggestions array (3-5 variants), optimizationTips, estimatedPerformance metrics, viralPotential score (0-1), brandSafety score (0-1).`;
+
+    const userPrompt = JSON.stringify({
+      type: context.type,
+      input: context.input,
+      platform: context.platform || 'instagram',
+      tone: context.tone || 'authentic',
+      userProfile: {
+        behaviorSummary: context.behaviorSummary,
+        brandVoice: context.sessionContext?.brandVoice || 'professional_friendly',
+        audienceInsights: this.getAudienceInsights(context.behaviorSummary),
+        contentHistory: context.sessionContext?.recentPosts?.slice(0, 10) || []
+      },
+      contextualFactors: {
+        currentTrends: await this.getCurrentTrends(),
+        timeOfDay: new Date().getHours(),
+        dayOfWeek: new Date().getDay(),
+        seasonalContext: this.getSeasonalContext()
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    return await this.callOpenAI(userPrompt, systemPrompt, 2000);
+  }
+
+  // ============ AGENT 5: NOTIFICATION INTELLIGENCE AGENT ============
+  async processNotifications(notifications: any[]): Promise<{
+    bundles: Array<{
+      id: string;
+      priority: number;
+      title: string;
+      summary: string;
+      actions: Array<{ label: string; action: string; type: 'primary' | 'secondary' }>;
+      items: any[];
+      urgency: 'low' | 'medium' | 'high';
+      category: string;
+      smartInsights: any;
+    }>;
+    totalCount: number;
+    nextCheckRecommended: string;
+    attentionScore: number;
+  }> {
+    const systemPrompt = `You are the Notification Intelligence Agent with revolutionary attention management capabilities.
+
+MISSION: Transform notification chaos into actionable, prioritized insights that respect user attention while maximizing important connections.
+
+REVOLUTIONARY BUNDLING STRATEGY:
+
+PRIORITY INTELLIGENCE:
+- CRITICAL (Immediate attention): Direct messages from VIPs, mentions in viral content, business opportunities
+- HIGH (Within hour): Comments on recent posts, mentions by followed accounts, trending topic opportunities
+- MEDIUM (Daily digest): Likes from engaged followers, new followers with potential, content performance milestones
+- LOW (Weekly summary): General likes, algorithmic suggestions, promotional content
+
+BEHAVIORAL ADAPTATION:
+- User Response Patterns: Learn optimal notification timing from historical responses
+- Attention Capacity: Adjust notification density based on user stress indicators
+- Interaction Preference: Prioritize notification types user actually acts upon
+- Context Awareness: Suppress low-priority notifications during focus sessions
+
+INTELLIGENT GROUPING:
+- CONVERSATION THREADS: Bundle all activity from single post/comment chain
+- CREATOR CLUSTERS: Group notifications from same creator across platforms
+- TOPIC COHERENCE: Bundle related content (same hashtag, similar topics)
+- TIME COHERENCE: Group notifications from same time period with shared context
+
+ANTI-FATIGUE FEATURES:
+- PATTERN SUPPRESSION: Mute repetitive low-value notifications
+- ENGAGEMENT RECIPROCITY: Highlight mutual engagement opportunities
+- SOCIAL DEBT TRACKING: Surface comments/messages requiring responses
+- OPPORTUNITY DETECTION: Flag potential collaborations, trending participation
+
+ACTIONABLE INTELLIGENCE:
+- SUGGESTED RESPONSES: Draft context-appropriate replies for comments
+- ENGAGEMENT STRATEGIES: Recommend optimal response timing and approach
+- RELATIONSHIP MAINTENANCE: Identify important connections needing attention
+- TREND PARTICIPATION: Alert to timely conversation joining opportunities
+
+ATTENTION ECONOMY OPTIMIZATION:
+- COGNITIVE LOAD BALANCING: Limit simultaneous decision requirements
+- URGENCY CALIBRATION: Prevent false urgency fatigue
+- SATISFACTION PREDICTION: Prioritize notifications likely to bring joy
+- DISTRACTION MINIMIZATION: Bundle low-priority items into scheduled digests
+
+OUTPUT: JSON with intelligent bundles array, attentionScore (user's current capacity), nextCheckRecommended time, smartInsights for each bundle.`;
+
+    const userPrompt = JSON.stringify({
+      notifications: notifications.slice(0, 100),
+      userContext: {
+        attentionCapacity: this.assessAttentionCapacity(),
+        responsePatterns: this.getResponsePatterns(),
+        relationshipPriorities: this.getRelationshipPriorities(),
+        currentFocus: this.getCurrentFocus(),
+        timeAvailable: this.estimateAvailableTime()
+      },
+      behavioralInsights: {
+        notificationPreferences: this.getNotificationPreferences(),
+        engagementTiming: this.getOptimalEngagementTimes(),
+        socialDebt: this.calculateSocialDebt(),
+        interactionValue: this.calculateInteractionValue()
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    return await this.callOpenAI(userPrompt, systemPrompt, 2000);
+  }
+
+  // ============ AGENT 6: SAFETY INTELLIGENCE AGENT ============
+  async moderateContent(content: { 
+    text?: string; 
+    url?: string; 
+    metadata?: any; 
+    context?: string;
+    userIntent?: string;
+  }): Promise<{
+    allowed: boolean;
+    issues: string[];
+    safeVersion?: string;
+    confidence: number;
+    recommendations: string[];
+    riskAssessment: any;
+  }> {
+    const systemPrompt = `You are the Safety Intelligence Agent with zero tolerance for harmful content while preserving authentic expression.
+
+MISSION: Protect users and maintain healthy discourse through intelligent content moderation with contextual understanding.
+
+SAFETY CATEGORIES (Strict Enforcement):
+
+HARASSMENT & ABUSE:
+- Personal attacks, doxxing, stalking behavior
+- Coordinated harassment campaigns
+- Targeted abuse based on identity or beliefs
+- Cyberbullying and intimidation tactics
+
+HATE SPEECH & DISCRIMINATION:
+- Content promoting hatred based on protected characteristics
+- Dehumanizing language or imagery
+- Supremacist ideologies and symbols
+- Discriminatory calls to action
+
+ADULT CONTENT & SAFETY:
+- Sexually explicit content in inappropriate contexts
+- Non-consensual intimate imagery
+- Content harmful to minors
+- Exploitation and grooming attempts
+
+MISINFORMATION & FRAUD:
+- Health misinformation with potential for harm
+- Financial scams and fraudulent schemes
+- Election/democratic process manipulation
+- Deepfakes and malicious impersonation
+
+VIOLENCE & EXTREMISM:
+- Graphic violence and gore
+- Terrorist content and recruitment
+- Self-harm promotion and instruction
+- Dangerous conspiracy theories
+
+INTELLIGENT CONTEXTUAL ANALYSIS:
+
+INTENT ASSESSMENT:
+- Educational vs promotional context
+- Satire and humor vs genuine harm
+- Cultural and linguistic context considerations
+- User history and credibility factors
+
+HARM POTENTIAL EVALUATION:
+- Immediate vs theoretical harm risk
+- Audience vulnerability assessment
+- Amplification and virality potential
+- Real-world consequence probability
+
+IMPROVEMENT OPPORTUNITIES:
+- Constructive alternatives for blocked content
+- Educational resources for borderline cases
+- Community guideline clarifications
+- Platform-specific policy reminders
+
+CONFIDENCE SCORING:
+- 0.95-1.0: Clear violation requiring immediate action
+- 0.85-0.94: Likely violation, recommend human review
+- 0.70-0.84: Borderline case, provide user guidance
+- 0.50-0.69: Context-dependent, suggest modifications
+- 0.0-0.49: Insufficient information for determination
+
+OUTPUT: JSON with allowed boolean, specific issues array, safe alternative suggestions, confidence score, actionable recommendations, detailed riskAssessment.`;
+
+    const userPrompt = JSON.stringify({
+      content: {
+        text: content.text?.substring(0, 2000), // Limit for token efficiency
+        url: content.url,
+        metadata: content.metadata,
+        context: content.context || 'general_post',
+        userIntent: content.userIntent || 'unknown'
+      },
+      assessmentContext: {
+        platformType: 'social_media',
+        audienceType: 'general_public',
+        userCredibility: 'standard', // Could be enhanced with actual user scores
+        contentHistory: 'positive' // Could be enhanced with actual content history
+      },
+      moderationStandards: {
+        strictness: 'standard',
+        culturalContext: 'global',
+        ageRating: 'general_audiences'
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    return await this.callOpenAI(userPrompt, systemPrompt, 1000);
+  }
+
+  // ============ AGENT 7: SESSION INTELLIGENCE AGENT ============
+  async optimizeSession(context: DecisionContext & {
+    sessionData: {
+      duration: number;
+      interactions: number;
+      scrollVelocity: number;
+      engagementRate: number;
+      skipRate: number;
+      dwellTime: number;
+    };
+  }): Promise<{
+    recommendedMode: 'quick_hits' | 'deep_dive' | 'discovery' | 'focus' | 'social' | 'learning';
+    adaptations: string[];
+    contentMix: Record<string, number>;
+    nextSessionPredict: string;
+    wellnessRecommendations: string[];
+    personalizedInsights: any;
+  }> {
+    const systemPrompt = `You are the Session Intelligence Agent with revolutionary adaptive experience capabilities.
+
+MISSION: Continuously optimize user experience through real-time behavioral analysis and predictive adaptation.
+
+SESSION MODES (Intelligent Selection):
+
+QUICK HITS MODE:
+- Short-form content under 30 seconds
+- High variety across topics and creators
+- Minimal reading requirements
+- Instant gratification optimization
+- Perfect for: Commuting, waiting, break times
+
+DEEP DIVE MODE:
+- Longer content with educational value
+- Related content clustering for topic exploration
+- Article and video essay prioritization
+- Knowledge building progressions
+- Perfect for: Learning sessions, research, weekend exploration
+
+DISCOVERY MODE:
+- 40% content outside comfort zone
+- New creator introduction with soft onboarding
+- Emerging trend participation opportunities
+- Cross-platform content suggestions
+- Perfect for: Expanding horizons, finding new interests
+
+FOCUS MODE:
+- Single topic or creator deep exploration
+- Distraction elimination and notification pause
+- Learning path construction
+- Expert content prioritization
+- Perfect for: Skill building, research projects
+
+SOCIAL MODE:
+- Friend and family content prioritization
+- Conversation starter content emphasis
+- Reply and comment optimization
+- Social debt management assistance
+- Perfect for: Maintaining relationships, social engagement
+
+LEARNING MODE:
+- Educational content with progressive difficulty
+- Skill-building pathway construction
+- Industry insight and professional development
+- Knowledge retention optimization
+- Perfect for: Career growth, hobby mastery
+
+REAL-TIME ADAPTATION TRIGGERS:
+
+ENGAGEMENT PATTERNS:
+- High skip rate (>70%) → Increase variety, reset recommendations
+- Long dwell time (>2 min/post) → Enable deep content, related suggestions
+- Rapid scrolling → Switch to visual content, reduce text density
+- High interaction rate → Amplify similar content, encourage engagement
+
+BEHAVIORAL INDICATORS:
+- Session length patterns → Predict optimal content pacing
+- Time-of-day preferences → Adjust content emotional tone
+- Device usage patterns → Optimize for mobile vs desktop experience
+- Attention span indicators → Balance cognitive load appropriately
+
+WELLNESS OPTIMIZATION:
+- Screen time awareness and break suggestions
+- Mood regulation through content emotional tone
+- Information overload prevention
+- Positive engagement encouragement
+
+PREDICTIVE MODELING:
+- Next session timing prediction
+- Content preference evolution tracking
+- Engagement quality vs quantity optimization
+- Long-term satisfaction trajectory analysis
+
+OUTPUT: JSON with recommendedMode, specific adaptations array, optimal contentMix percentages, nextSessionPredict, wellnessRecommendations, personalizedInsights object.`;
+
+    const userPrompt = JSON.stringify({
+      sessionData: context.sessionData,
+      behaviorHistory: {
+        recentSessions: context.behaviorSummary?.recentSessions?.slice(0, 10) || [],
+        engagementTrends: context.behaviorSummary?.engagementTrends || {},
+        moodPatterns: this.analyzeMoodPatterns(context.behaviorSummary),
+        attentionSpanTrends: this.analyzeAttentionSpans(context.behaviorSummary)
+      },
+      contextualFactors: {
+        timeOfDay: new Date().getHours(),
+        dayOfWeek: new Date().getDay(),
+        deviceType: context.sessionContext?.deviceType || 'mobile',
+        locationContext: context.sessionContext?.locationContext || 'unknown',
+        socialContext: context.sessionContext?.socialContext || 'alone'
+      },
+      wellnessMetrics: {
+        screenTimeToday: context.sessionContext?.screenTimeToday || 0,
+        lastBreakTime: context.sessionContext?.lastBreakTime || 0,
+        stressIndicators: this.detectStressIndicators(context.sessionData),
+        positivityScore: this.calculatePositivityScore(context.behaviorSummary)
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    return await this.callOpenAI(userPrompt, systemPrompt, 2000);
+  }
+
+  // ============ UTILITY METHODS ============
+  private inferMoodFromBehavior(behaviorSummary: any): string {
+    const engagement = behaviorSummary?.engagementPatterns?.engagementRate || 0;
+    const scrollSpeed = behaviorSummary?.scrollBehavior?.scrollSpeed || 'medium';
+    const skipRate = behaviorSummary?.engagementPatterns?.skipRate || 0;
+
+    if (engagement > 0.3 && scrollSpeed === 'slow') return 'engaged';
+    if (skipRate > 0.7 && scrollSpeed === 'fast') return 'restless';
+    if (engagement < 0.1 && scrollSpeed === 'slow') return 'browsing';
+    return 'neutral';
+  }
+
+  private extractMoodIndicators(behaviorSummary: any): any {
+    return {
+      energy: this.calculateEnergyLevel(behaviorSummary),
+      attention: this.calculateAttentionLevel(behaviorSummary),
+      socialDesire: this.calculateSocialDesire(behaviorSummary),
+      learningIntent: this.calculateLearningIntent(behaviorSummary)
+    };
+  }
+
+  private calculateAttentionSpan(behaviorSummary: any): number {
+    const avgDwellTime = behaviorSummary?.scrollBehavior?.avgDwellTime || 5000;
+    return Math.min(60, Math.max(5, avgDwellTime / 1000)); // 5-60 seconds
+  }
+
+  private assessCognitiveLoad(sessionContext: any): number {
+    const multitasking = sessionContext?.multitasking || false;
+    const distractions = sessionContext?.distractions || 0;
+    const timeOfDay = new Date().getHours();
+    
+    let load = 0.5; // baseline
+    if (multitasking) load += 0.2;
+    if (distractions > 2) load += 0.3;
+    if (timeOfDay < 8 || timeOfDay > 22) load += 0.1; // early morning or late night
+    
+    return Math.min(1, load);
+  }
+
+  private calculateComplexity(post: any): number {
+    const textLength = post.text?.length || 0;
+    const hasMedia = post.content?.media?.length > 0;
+    const linkCount = (post.text?.match(/https?:\/\//g) || []).length;
+    
+    let complexity = 0;
+    if (textLength > 500) complexity += 0.3;
+    if (textLength > 1000) complexity += 0.3;
+    if (hasMedia) complexity += 0.2;
+    if (linkCount > 0) complexity += 0.2;
+    
+    return complexity;
+  }
+
+  private getContentAge(publishedTime: string): number {
+    const now = new Date().getTime();
+    const published = new Date(publishedTime).getTime();
+    return (now - published) / (1000 * 60 * 60); // hours
+  }
+
+  private async getCurrentTrends(): Promise<string[]> {
+    // In a real implementation, this would fetch from trending APIs
+    return ['AI', 'sustainability', 'remote_work', 'mental_health', 'technology'];
+  }
+
+  private getSeasonalContext(): string {
+    const month = new Date().getMonth();
+    if (month >= 2 && month <= 4) return 'spring';
+    if (month >= 5 && month <= 7) return 'summer';
+    if (month >= 8 && month <= 10) return 'fall';
+    return 'winter';
+  }
+
+  private getAudienceInsights(behaviorSummary: any): any {
+    return {
+      primaryDemographic: 'tech_savvy_millennials',
+      engagementPeaks: ['9am', '1pm', '7pm'],
+      preferredContentTypes: behaviorSummary?.preferredContentTypes || ['video', 'image'],
+      responseStyle: 'thoughtful_and_engaging'
+    };
+  }
+
+  // Additional utility methods for comprehensive behavioral analysis
+  private calculateEnergyLevel(behaviorSummary: any): number {
+    const scrollSpeed = behaviorSummary?.scrollBehavior?.scrollSpeed || 'medium';
+    const interactionRate = behaviorSummary?.engagementPatterns?.engagementRate || 0;
+    
+    if (scrollSpeed === 'fast' && interactionRate > 0.2) return 0.8;
+    if (scrollSpeed === 'slow' && interactionRate < 0.1) return 0.3;
+    return 0.5;
+  }
+
+  private calculateAttentionLevel(behaviorSummary: any): number {
+    const dwellTime = behaviorSummary?.scrollBehavior?.avgDwellTime || 5000;
+    return Math.min(1, dwellTime / 30000); // Max at 30 seconds
+  }
+
+  private calculateSocialDesire(behaviorSummary: any): number {
+    const commentRate = behaviorSummary?.engagementPatterns?.commentRate || 0;
+    const shareRate = behaviorSummary?.engagementPatterns?.shareRate || 0;
+    return (commentRate * 2 + shareRate) / 3;
+  }
+
+  private calculateLearningIntent(behaviorSummary: any): number {
+    const saveRate = behaviorSummary?.engagementPatterns?.saveRate || 0;
+    const longContentEngagement = behaviorSummary?.contentTypeEngagement?.longform || 0;
+    return (saveRate + longContentEngagement) / 2;
+  }
+
+  private assessAttentionCapacity(): number {
+    const hour = new Date().getHours();
+    if (hour >= 9 && hour <= 11) return 0.9; // Morning peak
+    if (hour >= 14 && hour <= 16) return 0.8; // Afternoon peak
+    if (hour >= 19 && hour <= 21) return 0.7; // Evening
+    return 0.5; // Other times
+  }
+
+  private getResponsePatterns(): any {
+    return {
+      avgResponseTime: '2 hours',
+      preferredResponseTimes: ['9am', '1pm', '7pm'],
+      responseRate: 0.6,
+      thoroughnessScore: 0.7
+    };
+  }
+
+  private getRelationshipPriorities(): any {
+    return {
+      family: 1.0,
+      close_friends: 0.9,
+      colleagues: 0.7,
+      acquaintances: 0.4,
+      public_figures: 0.2
+    };
+  }
+
+  private getCurrentFocus(): string {
+    const hour = new Date().getHours();
+    if (hour >= 9 && hour <= 17) return 'work';
+    if (hour >= 18 && hour <= 22) return 'personal';
+    return 'leisure';
+  }
+
+  private estimateAvailableTime(): number {
+    // Returns minutes of estimated available time
+    const hour = new Date().getHours();
+    if (hour >= 9 && hour <= 17) return 5; // Work hours
+    if (hour >= 18 && hour <= 22) return 15; // Evening
+    return 30; // Other times
+  }
+
+  private getNotificationPreferences(): any {
+    return {
+      maxPerHour: 3,
+      mutedTypes: ['promotional', 'algorithmic_suggestions'],
+      priorityTypes: ['comments', 'mentions', 'direct_messages'],
+      quietHours: { start: 22, end: 8 }
+    };
+  }
+
+  private getOptimalEngagementTimes(): string[] {
+    return ['9:00', '13:00', '19:00']; // Peak engagement times
+  }
+
+  private calculateSocialDebt(): number {
+    // Returns number of interactions requiring response
+    return 3; // Mock value
+  }
+
+  private calculateInteractionValue(): number {
+    // Returns value score of potential interactions
+    return 0.7; // Mock value
+  }
+
+  private analyzeMoodPatterns(behaviorSummary: any): any {
+    return {
+      morningMood: 'energetic',
+      afternoonMood: 'focused',
+      eveningMood: 'relaxed',
+      weekendMood: 'exploratory'
+    };
+  }
+
+  private analyzeAttentionSpans(behaviorSummary: any): any {
+    return {
+      shortContent: 15, // seconds
+      mediumContent: 45,
+      longContent: 180,
+      trend: 'stable'
+    };
+  }
+
+  private detectStressIndicators(sessionData: any): any {
+    return {
+      rapidScrolling: sessionData.scrollVelocity > 5,
+      highSkipRate: sessionData.skipRate > 0.8,
+      shortSessions: sessionData.duration < 300,
+      lowEngagement: sessionData.engagementRate < 0.05
+    };
+  }
+
+  private calculatePositivityScore(behaviorSummary: any): number {
+    // Analyze content preferences and engagement patterns for positivity
+    const positiveTagEngagement = 0.7; // Mock calculation
+    const constructiveInteractions = 0.8; // Mock calculation
+    return (positiveTagEngagement + constructiveInteractions) / 2;
+  }
+
+  // Legacy compatibility methods
+  async getRankingAndUIDecisions(request: any): Promise<any> {
+    const context: DecisionContext = {
+      userId: request.userId,
+      behaviorSummary: request.behaviorSummary,
+      contentCandidates: request.posts,
+      sessionContext: { intent: request.intent, mode: request.sessionMode },
+      intent: request.intent
+    };
+
+    const [uiDecisions, ranking] = await Promise.all([
+      this.generateUIDecisions(context),
+      this.rankContent(context)
+    ]);
+
+    return {
+      rankedPosts: ranking.rankedIds,
+      uiDecisions,
+      explanations: ranking.explanations,
+      sessionInsights: {
+        optimization: ranking.sessionOptimization,
+        confidence: ranking.confidenceScore,
+        adaptiveInsights: ranking.adaptiveInsights
       }
     };
-  }
-
-  private getFallbackResult(posts: any[]): RankingResult {
-    return {
-      rankedPosts: posts,
-      uiDecisions: this.getDefaultUIDecisions(),
-      explanations: {},
-      sessionInsights: { mode: 'fallback', reason: 'AI decision engine unavailable' }
-    };
-  }
-
-  private fallbackRanking(posts: any[], behaviorSummary: any): any[] {
-    // Simple time-based ranking as fallback
-    return posts.sort((a, b) => 
-      new Date(b.timePublished).getTime() - new Date(a.timePublished).getTime()
-    );
-  }
-
-  private async generateExplanations(posts: any[], behaviorSummary: any): Promise<{ [postId: string]: string }> {
-    const explanations: { [postId: string]: string } = {};
-    
-    for (const post of posts.slice(0, 5)) {
-      explanations[post.id] = await this.generateExplanationText(post, 'recommended');
-    }
-    
-    return explanations;
-  }
-
-  private async generateExplanationText(post: any, action: string): Promise<string> {
-    const reasons = [];
-    
-    if (post.tags?.includes('ai') || post.tags?.includes('technology')) {
-      reasons.push('matches your interest in technology');
-    }
-    
-    if (post.stats?.engagement > 100) {
-      reasons.push('has high engagement');
-    }
-    
-    if (post.type === 'short') {
-      reasons.push('perfect for quick viewing');
-    }
-    
-    return reasons.length > 0 
-      ? `This post was ${action} because it ${reasons.join(' and ')}.`
-      : `This post was ${action} based on your activity patterns.`;
-  }
-
-  private getDecisionFactors(post: any, action: string): string[] {
-    const factors = ['relevance', 'timing'];
-    
-    if (post.stats?.likes > 50) factors.push('popularity');
-    if (post.tags?.length > 0) factors.push('topic_match');
-    if (action === 'recommended') factors.push('personalization');
-    
-    return factors;
-  }
-
-  private getEngagementStyle(engagementPatterns: any): string {
-    if (!engagementPatterns) return 'observer';
-    
-    if (engagementPatterns.likeRate > 0.3) return 'active_engager';
-    if (engagementPatterns.shareRate > 0.1) return 'content_sharer';
-    if (engagementPatterns.commentRate > 0.05) return 'discussion_participant';
-    if (engagementPatterns.skipRate > 0.7) return 'content_browser';
-    
-    return 'casual_viewer';
-  }
-
-  private getSessionInsights(behaviorSummary: any, sessionMode: string): any {
-    return {
-      mode: sessionMode,
-      suggestedDuration: this.getSuggestedSessionDuration(behaviorSummary),
-      contentMix: this.getOptimalContentMix(behaviorSummary),
-      nextActions: this.getNextActionSuggestions(behaviorSummary)
-    };
-  }
-
-  private getSuggestedSessionDuration(behaviorSummary: any): string {
-    const avgDuration = behaviorSummary.avgSessionDuration || 0;
-    if (avgDuration < 300) return 'short (5-10 min)';
-    if (avgDuration < 900) return 'medium (15-20 min)';
-    return 'extended (30+ min)';
-  }
-
-  private getOptimalContentMix(behaviorSummary: any): any {
-    return {
-      shorts: behaviorSummary.scrollBehavior?.scrollSpeed === 'fast' ? 70 : 40,
-      longform: behaviorSummary.scrollBehavior?.scrollSpeed === 'slow' ? 50 : 30,
-      interactive: 20,
-      trending: 10
-    };
-  }
-
-  private getNextActionSuggestions(behaviorSummary: any): string[] {
-    const suggestions = [];
-    
-    if (behaviorSummary.engagementPatterns?.likeRate > 0.2) {
-      suggestions.push('Share your favorite content');
-    }
-    
-    if (behaviorSummary.totalEvents > 100) {
-      suggestions.push('Create a post about your interests');
-    }
-    
-    suggestions.push('Explore trending topics');
-    
-    return suggestions;
-  }
-
-  private getPlatformEngagementMultiplier(platform: string): number {
-    const multipliers = {
-      instagram: 1.2,
-      youtube: 1.0,
-      twitter: 1.1,
-      facebook: 0.9
-    };
-    return multipliers[platform as keyof typeof multipliers] || 1.0;
-  }
-
-  private getOptimalLengthScore(content: string, platform: string): number {
-    const optimalLengths = {
-      instagram: { min: 100, max: 300 },
-      youtube: { min: 200, max: 1000 },
-      twitter: { min: 50, max: 200 },
-      facebook: { min: 200, max: 500 }
-    };
-
-    const optimal = optimalLengths[platform as keyof typeof optimalLengths] || { min: 100, max: 300 };
-    const length = content.length;
-
-    if (length >= optimal.min && length <= optimal.max) return 1.0;
-    if (length < optimal.min) return 0.8;
-    return 0.9;
-  }
-
-  private async getEngagementRecommendations(analysis: any, platform: string): Promise<string[]> {
-    const recommendations = [];
-
-    if (analysis.sentiment.rating < 3) {
-      recommendations.push('Consider adding more positive tone');
-    }
-
-    if (analysis.complexity > 7) {
-      recommendations.push('Simplify language for broader appeal');
-    }
-
-    if (platform === 'instagram' && !analysis.topics.includes('visual')) {
-      recommendations.push('Add visual elements or descriptions');
-    }
-
-    return recommendations;
-  }
-
-  private suggestOptimalTiming(platform: string): string {
-    const timings = {
-      instagram: '6-9 PM weekdays',
-      youtube: '2-4 PM weekends',
-      twitter: '12-3 PM weekdays',
-      facebook: '1-4 PM weekdays'
-    };
-    return timings[platform as keyof typeof timings] || 'afternoon hours';
-  }
-
-  private analyzeAudienceMatch(topics: string[], platform: string): number {
-    // Simplified audience matching score
-    const platformTopics = {
-      instagram: ['lifestyle', 'fashion', 'food', 'travel'],
-      youtube: ['education', 'entertainment', 'tutorials'],
-      twitter: ['news', 'technology', 'politics', 'trends'],
-      facebook: ['family', 'community', 'events', 'business']
-    };
-
-    const relevantTopics = platformTopics[platform as keyof typeof platformTopics] || [];
-    const matches = topics.filter(topic => 
-      relevantTopics.some(relevant => topic.toLowerCase().includes(relevant))
-    );
-
-    return Math.min(10, (matches.length / topics.length) * 10);
-  }
-
-  private getMoodBasedContentTypes(mood: string, timeAvailable: string): string[] {
-    const moodMap = {
-      energetic: ['short', 'live'],
-      calm: ['longform', 'image'],
-      focused: ['longform', 'thread'],
-      social: ['thread', 'live'],
-      creative: ['image', 'longform']
-    };
-
-    const timeMap = {
-      quick: ['short', 'image'],
-      moderate: ['short', 'longform'],
-      extended: ['longform', 'thread', 'live']
-    };
-
-    const moodTypes = moodMap[mood as keyof typeof moodMap] || ['short', 'longform'];
-    const timeTypes = timeMap[timeAvailable as keyof typeof timeMap] || ['short', 'longform'];
-
-    return [...new Set([...moodTypes, ...timeTypes])];
-  }
-
-  private getMoodBasedTags(mood: string, goal: string, behaviorSummary: any): string[] {
-    const baseTags = behaviorSummary.topTags?.slice(0, 5) || [];
-    
-    const moodTags = {
-      energetic: ['fitness', 'sports', 'motivation'],
-      calm: ['meditation', 'nature', 'peaceful'],
-      focused: ['education', 'productivity', 'learning'],
-      social: ['community', 'discussion', 'social'],
-      creative: ['art', 'design', 'inspiration']
-    };
-
-    const goalTags = {
-      entertainment: ['funny', 'memes', 'viral'],
-      learning: ['education', 'tutorial', 'tips'],
-      inspiration: ['motivation', 'quotes', 'success'],
-      news: ['breaking', 'updates', 'current']
-    };
-
-    return [...new Set([
-      ...baseTags,
-      ...(moodTags[mood as keyof typeof moodTags] || []),
-      ...(goalTags[goal as keyof typeof goalTags] || [])
-    ])];
-  }
-
-  private getMoodBasedCreators(mood: string, behaviorSummary: any): string[] {
-    // Return user's top creators, could be enhanced with mood-specific filtering
-    return behaviorSummary.topCreators?.slice(0, 5) || [];
-  }
-
-  private getMoodBasedDuration(timeAvailable: string): { min: number; max: number } {
-    const durations = {
-      quick: { min: 0, max: 60 },
-      moderate: { min: 0, max: 300 },
-      extended: { min: 0, max: 1800 }
-    };
-    return durations[timeAvailable as keyof typeof durations] || { min: 0, max: 300 };
-  }
-
-  private getMoodBasedPriority(mood: string, goal: string): string[] {
-    const priorities = [];
-    
-    if (mood === 'energetic') priorities.push('high_engagement');
-    if (mood === 'calm') priorities.push('peaceful_content');
-    if (goal === 'learning') priorities.push('educational_value');
-    if (goal === 'entertainment') priorities.push('viral_potential');
-    
-    return priorities;
-  }
-
-  private async executeContentFilter(parameters: any, userId: string): Promise<any> {
-    return {
-      success: true,
-      message: 'Content filter applied successfully',
-      filters: parameters,
-      action: 'filter_applied'
-    };
-  }
-
-  private async executeSearch(parameters: any, userId: string): Promise<any> {
-    return {
-      success: true,
-      message: `Searching for: ${parameters.query}`,
-      query: parameters.query,
-      action: 'search_initiated'
-    };
-  }
-
-  private async executePostCreation(parameters: any, userId: string): Promise<any> {
-    return {
-      success: true,
-      message: 'Post creation initiated',
-      content: parameters.content,
-      platforms: parameters.platforms,
-      action: 'post_creation_started'
-    };
-  }
-
-  private getEngagementTips(platform: string, behaviorSummary: any): string[] {
-    const tips = {
-      instagram: ['Use 3-5 relevant hashtags', 'Post during peak hours', 'Include a call-to-action'],
-      youtube: ['Create compelling thumbnails', 'Use descriptive titles', 'Engage with comments'],
-      twitter: ['Keep it under 280 characters', 'Use trending hashtags', 'Join conversations'],
-      facebook: ['Ask questions to encourage comments', 'Share personal stories', 'Use visual content']
-    };
-
-    return tips[platform as keyof typeof tips] || ['Create engaging content', 'Post consistently', 'Interact with your audience'];
   }
 }
 
-export const aiDecisionEngine = new AIDecisionEngineService();
+export const aiDecisionEngine = new AIDecisionEngine();

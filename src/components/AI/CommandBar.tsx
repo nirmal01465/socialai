@@ -47,45 +47,137 @@ const CommandBar: React.FC = () => {
   const [results, setResults] = useState<any[]>([]);
   
   const inputRef = useRef<HTMLInputElement>(null);
-  const { executeCommand, getSuggestions, isLoading } = useAICommands();
+  const { executeCommand, getSuggestions, getContextualSuggestions, isLoading } = useAICommands();
 
-  const defaultSuggestions: CommandSuggestion[] = [
-    {
-      id: 'trending-ai',
-      text: 'Show trending AI posts',
-      description: 'Find popular AI and technology content',
-      category: 'search',
-      icon: <SearchIcon />
-    },
-    {
-      id: 'filter-short',
-      text: 'Show only short videos',
-      description: 'Filter feed to show videos under 60 seconds',
-      category: 'filter',
-      icon: <CommandIcon />
-    },
-    {
-      id: 'summarize-feed',
-      text: 'Summarize my feed',
-      description: 'Get AI-generated summary of recent posts',
-      category: 'ai',
-      icon: <SparklesIcon />
-    },
-    {
-      id: 'suggest-post',
-      text: 'Suggest what to post',
-      description: 'Get AI recommendations for your next post',
-      category: 'ai',
-      icon: <BulbIcon />
-    },
-    {
-      id: 'cross-post',
-      text: 'Cross-post to all platforms',
-      description: 'Share content across all connected accounts',
-      category: 'action',
-      icon: <CommandIcon />
+  // Revolutionary AI-powered suggestions that adapt to user behavior and context
+  const getRevolutionarySuggestions = (): CommandSuggestion[] => {
+    const hour = new Date().getHours();
+    const suggestions: CommandSuggestion[] = [];
+
+    // Morning Intelligence (6-10 AM)
+    if (hour >= 6 && hour <= 10) {
+      suggestions.push(
+        {
+          id: 'morning-briefing',
+          text: 'Give me my morning briefing',
+          description: 'AI summary of overnight updates and trending topics',
+          category: 'ai',
+          icon: <BulbIcon />
+        },
+        {
+          id: 'productivity-mode',
+          text: 'Switch to productivity focus mode',
+          description: 'Minimize distractions, show work-relevant content only',
+          category: 'filter',
+          icon: <CommandIcon />
+        }
+      );
     }
-  ];
+
+    // Work Hours Intelligence (10 AM - 5 PM)
+    if (hour >= 10 && hour <= 17) {
+      suggestions.push(
+        {
+          id: 'quick-hits',
+          text: 'Quick hits mode for 15 minutes',
+          description: 'Short-form content optimized for busy schedule',
+          category: 'filter',
+          icon: <SparklesIcon />
+        },
+        {
+          id: 'professional-content',
+          text: 'Show professional development content',
+          description: 'Industry insights and career-building posts',
+          category: 'search',
+          icon: <SearchIcon />
+        }
+      );
+    }
+
+    // Evening Intelligence (5 PM - 10 PM)
+    if (hour >= 17 && hour <= 22) {
+      suggestions.push(
+        {
+          id: 'deep-dive-mode',
+          text: 'Switch to deep dive mode',
+          description: 'Longer content and topic exploration for evening browsing',
+          category: 'filter',
+          icon: <CommandIcon />
+        },
+        {
+          id: 'discover-new',
+          text: 'Show me something completely new',
+          description: 'Discovery mode: 40% outside your usual interests',
+          category: 'ai',
+          icon: <BulbIcon />
+        }
+      );
+    }
+
+    // Universal Revolutionary Commands
+    suggestions.push(
+      {
+        id: 'mood-adaptive',
+        text: 'Adapt feed to my current mood',
+        description: 'AI analyzes your behavior and optimizes content emotional tone',
+        category: 'ai',
+        icon: <SparklesIcon />
+      },
+      {
+        id: 'viral-potential',
+        text: 'Show me viral potential posts under 3 minutes',
+        description: 'AI-curated content with high engagement momentum',
+        category: 'search',
+        icon: <SearchIcon />
+      },
+      {
+        id: 'draft-reply',
+        text: 'Draft witty replies to my top comments',
+        description: 'AI generates context-appropriate responses in your voice',
+        category: 'ai',
+        icon: <BulbIcon />
+      },
+      {
+        id: 'cross-platform',
+        text: 'Cross-post to all platforms with tone adaptation',
+        description: 'Automatically adjust content for each platform\'s audience',
+        category: 'action',
+        icon: <CommandIcon />
+      },
+      {
+        id: 'engagement-analysis',
+        text: 'Why am I seeing this content?',
+        description: 'AI explains ranking decisions and personalization factors',
+        category: 'ai',
+        icon: <BulbIcon />
+      },
+      {
+        id: 'social-debt',
+        text: 'Show me who I should respond to',
+        description: 'Prioritized list of comments and messages needing attention',
+        category: 'action',
+        icon: <SearchIcon />
+      },
+      {
+        id: 'learning-path',
+        text: 'Create learning path for [topic]',
+        description: 'AI curates progressive content for skill building',
+        category: 'ai',
+        icon: <SparklesIcon />
+      },
+      {
+        id: 'trend-participation',
+        text: 'Find trending conversations I can join',
+        description: 'Opportunities to participate in relevant discussions',
+        category: 'search',
+        icon: <SearchIcon />
+      }
+    );
+
+    return suggestions.slice(0, 8); // Limit for performance
+  };
+
+  const defaultSuggestions: CommandSuggestion[] = getRevolutionarySuggestions();
 
   const [suggestions, setSuggestions] = useState<CommandSuggestion[]>(defaultSuggestions);
 
@@ -247,7 +339,7 @@ const CommandBar: React.FC = () => {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Type a command like 'show me trending AI posts' or 'filter by photography'..."
+                  placeholder="Try: 'Show viral AI videos under 3 minutes' or 'Draft witty replies to my comments' or 'Switch to focus mode'..."
                   className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
                 

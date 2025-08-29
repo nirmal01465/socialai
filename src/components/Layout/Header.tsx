@@ -4,6 +4,7 @@ import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { logout } from '../../store/slices/authSlice';
 import { toggleTheme, toggleCommandBar, setSearchQuery } from '../../store/slices/uiSlice';
 import { useAICommands } from '../../hooks/useAICommands';
+import SessionModeSelector from '../AI/SessionModeSelector';
 
 // Icons (using Feather icons via CDN)
 const SearchIcon = () => (
@@ -191,7 +192,10 @@ const Header: React.FC = () => {
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3">
+            
+            {/* Revolutionary Session Mode Selector */}
+            <SessionModeSelector />
             
             {/* AI Command Bar Toggle */}
             <motion.button

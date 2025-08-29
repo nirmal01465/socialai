@@ -8,8 +8,8 @@ import Post from '../models/Post.js';
 
 const router = express.Router();
 
-// Process natural language command
-router.post('/command', [
+// Process natural language command (Revolutionary Command Intelligence Agent)
+router.post('/commands', [
   body('command').notEmpty().isLength({ min: 1, max: 500 }),
   body('context').optional().isObject()
 ], async (req, res) => {
@@ -22,28 +22,88 @@ router.post('/command', [
     const { command, context = {} } = req.body;
     const userId = req.user.userId;
 
-    // Get user behavior summary for context
+    // Get comprehensive context for AI command processing
     const behaviorSummary = await behaviorAnalytics.generateSummary(userId);
     const user = await User.findById(userId).select('-password');
 
-    // Process command with AI
-    const commandResult = await aiDecisionEngine.processCommand({
+    // Process with Revolutionary Command Intelligence Agent
+    const result = await aiDecisionEngine.processCommand({
       userId,
       command,
-      context,
-      behaviorSummary,
-      userProfile: user
+      context: {
+        ...context,
+        behaviorSummary,
+        userProfile: user,
+        sessionContext: context.sessionContext || {}
+      }
     });
 
     res.json({
-      success: true,
-      result: commandResult,
+      success: result.success,
+      action: result.action,
+      parameters: result.parameters,
+      explanation: result.explanation,
+      suggestions: result.suggestions,
+      confidence: result.confidence,
+      executionPlan: result.executionPlan,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('AI command error:', error);
-    res.status(500).json({ error: 'Failed to process command' });
+    console.error('Revolutionary AI command error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'AI command processing failed',
+      suggestions: [
+        'Try rephrasing your command',
+        'Use simpler language',
+        'Check your connection and try again'
+      ]
+    });
+  }
+});
+
+// Revolutionary Command Suggestions
+router.post('/suggestions', [
+  body('input').notEmpty().isLength({ min: 1, max: 200 }),
+  body('context').optional().isObject()
+], async (req, res) => {
+  try {
+    const { input, context = {} } = req.body;
+    const userId = req.user.userId;
+
+    const behaviorSummary = await behaviorAnalytics.generateSummary(userId);
+    
+    // Generate intelligent suggestions using AI
+    const suggestions = await aiDecisionEngine.processCommand({
+      userId,
+      command: `Generate command suggestions for input: "${input}"`,
+      context: {
+        type: 'suggestion_generation',
+        input,
+        behaviorSummary,
+        ...context
+      }
+    });
+
+    res.json({
+      suggestions: suggestions.suggestions || [],
+      confidence: suggestions.confidence || 0.8,
+      context: input,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Suggestions generation error:', error);
+    res.json({
+      suggestions: [
+        { id: 'fallback-1', text: 'Show trending posts', category: 'search', confidence: 0.7 },
+        { id: 'fallback-2', text: 'Filter by topic', category: 'filter', confidence: 0.7 },
+        { id: 'fallback-3', text: 'Switch to focus mode', category: 'session', confidence: 0.7 }
+      ],
+      confidence: 0.6,
+      fallback: true
+    });
   }
 });
 
@@ -91,35 +151,130 @@ router.post('/suggest-content', [
   }
 });
 
-// Get UI layout decisions
+// Revolutionary UI Intelligence Agent
 router.post('/ui-decisions', [
-  body('sessionData').optional().isObject(),
-  body('currentLayout').optional().isObject()
+  body('behaviorSummary').optional().isObject(),
+  body('sessionContext').optional().isObject()
 ], async (req, res) => {
   try {
-    const { sessionData = {}, currentLayout = {} } = req.body;
+    const { behaviorSummary: providedSummary, sessionContext = {} } = req.body;
     const userId = req.user.userId;
 
-    // Get recent behavior data
-    const behaviorSummary = await behaviorAnalytics.generateSummary(userId);
+    // Use provided summary or generate fresh one
+    const behaviorSummary = providedSummary || await behaviorAnalytics.generateSummary(userId);
     
-    // Get AI-powered UI decisions
-    const uiDecisions = await aiDecisionEngine.getUIDecisions({
+    // Revolutionary UI Intelligence Agent
+    const uiDecisions = await aiDecisionEngine.generateUIDecisions({
       userId,
       behaviorSummary,
-      sessionData,
-      currentLayout
+      sessionContext: {
+        ...sessionContext,
+        timestamp: new Date().toISOString()
+      }
     });
 
     res.json({
-      uiDecisions,
-      reasoning: uiDecisions.reasoning,
+      ...uiDecisions,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('UI decisions error:', error);
-    res.status(500).json({ error: 'Failed to generate UI decisions' });
+    console.error('Revolutionary UI decisions error:', error);
+    res.status(500).json({
+      error: 'UI intelligence temporarily unavailable',
+      fallback: {
+        version: "1.0",
+        layout: {
+          sections: [{ id: "unified_feed", priority: 0, visible: true }],
+          feedColumns: 1,
+          cardStyle: "detailed",
+          showSidebar: false,
+          adaptiveFeatures: { autoSummary: true, contextualSuggestions: true, smartNotifications: true, realTimeAdaptation: true }
+        },
+        featureFlags: { commandBar: true, whyThisPost: true },
+        feedRules: { blocklist: [], boostTags: ["trending"], preferredContentTypes: ["video"], diversityWeight: 0.7, moodOptimization: true }
+      }
+    });
+  }
+});
+
+// Behavior Summary for AI Intelligence
+router.post('/behavior-summary', [
+  body('summary').isObject(),
+  body('sessionContext').optional().isObject()
+], async (req, res) => {
+  try {
+    const { summary, sessionContext = {} } = req.body;
+    const userId = req.user.userId;
+
+    // Store behavior summary for AI processing
+    await behaviorAnalytics.processSummary(userId, summary, sessionContext);
+
+    // Trigger real-time AI adaptations if significant changes detected
+    const adaptationTrigger = await aiDecisionEngine.optimizeSession({
+      userId,
+      behaviorSummary: summary,
+      sessionContext,
+      sessionData: {
+        duration: sessionContext.duration || 0,
+        interactions: sessionContext.interactions || 0,
+        scrollVelocity: sessionContext.scrollVelocity || 0,
+        engagementRate: sessionContext.engagementRate || 0,
+        skipRate: sessionContext.skipRate || 0,
+        dwellTime: sessionContext.dwellTime || 0
+      }
+    });
+
+    res.json({
+      success: true,
+      adaptations: adaptationTrigger,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Behavior summary processing error:', error);
+    res.status(500).json({ error: 'Failed to process behavior summary' });
+  }
+});
+
+// Session Mode Intelligence
+router.post('/session-mode', [
+  body('mode').isIn(['quick_hits', 'deep_dive', 'discovery', 'focus', 'social', 'learning']),
+  body('duration').optional().isInt({ min: 0 }),
+  body('trigger').optional().isString()
+], async (req, res) => {
+  try {
+    const { mode, duration, trigger = 'user_selection' } = req.body;
+    const userId = req.user.userId;
+
+    const behaviorSummary = await behaviorAnalytics.generateSummary(userId);
+
+    // Optimize session with AI
+    const sessionOptimization = await aiDecisionEngine.optimizeSession({
+      userId,
+      behaviorSummary,
+      sessionContext: { requestedMode: mode, trigger },
+      sessionData: {
+        duration: 0,
+        interactions: 0,
+        scrollVelocity: 0,
+        engagementRate: 0,
+        skipRate: 0,
+        dwellTime: 0
+      }
+    });
+
+    res.json({
+      success: true,
+      mode,
+      optimization: sessionOptimization,
+      duration,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Session mode optimization error:', error);
+    res.status(500).json({ error: 'Failed to optimize session mode' });
   }
 });
 
